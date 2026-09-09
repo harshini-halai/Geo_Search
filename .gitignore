@@ -1,10 +1,6 @@
-﻿venv/
-__pycache__/
-*.pyc
-storage/models/*
-storage/raw_geotiff/*
+﻿data/qdrant/.lock
+data/qdrant/
+data/*.db
 storage/tiles/*
-storage/qdrant_db/*
-storage/*.db
-!storage/**/.gitkeep
+storage/raw_geotiff/*
 .env
