@@ -9,13 +9,20 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DB_ECHO,
-    pool_size=settings.DB_POOL_SIZE,
-    max_overflow=settings.DB_MAX_OVERFLOW,
-    pool_pre_ping=True,
-)
+def _create_engine():
+    kwargs: dict = {"echo": settings.DB_ECHO}
+    if settings.DATABASE_URL.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        kwargs.update(
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_pre_ping=True,
+        )
+    return create_async_engine(settings.DATABASE_URL, **kwargs)
+
+
+engine = _create_engine()
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 

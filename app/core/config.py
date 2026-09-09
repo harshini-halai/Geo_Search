@@ -24,7 +24,9 @@ class Settings(BaseSettings):
         default_factory=lambda: Path(__file__).resolve().parents[2] / "data" / "qdrant"
     )
 
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/geo_semantic"
+    DATABASE_URL: str = Field(
+        default_factory=lambda: f"sqlite+aiosqlite:///{(Path(__file__).resolve().parents[2] / 'data' / 'geo_semantic.db').as_posix()}"
+    )
     DB_ECHO: bool = False
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
