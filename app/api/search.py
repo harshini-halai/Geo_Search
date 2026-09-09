@@ -103,22 +103,18 @@ class ImagePathSearchRequest(BaseModel):
 
 @router.post("/image-path", response_model=SearchResponse)
 async def search_by_image_path(payload: ImagePathSearchRequest) -> SearchResponse:
+    from pathlib import Path
+    import asyncio
+
     embedder = get_embedder()
     store = get_qdrant_store()
 
-    try:
-        vector = await embedder.embed_image_path.__wrapped__  # type: ignore[attr-defined]
-    except AttributeError:
-        vector = None
+    path = Path(payload.image_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"Image not found: {payload.image_path}")
 
-    if vector is None:
-        from pathlib import Path
-
-        path = Path(payload.image_path)
-        if not path.exists():
-            raise HTTPException(status_code=404, detail=f"Image not found: {payload.image_path}")
-        loop = __import__("asyncio").get_running_loop()
-        vector = await loop.run_in_executor(None, embedder.embed_image_path, str(path))
+    loop = asyncio.get_running_loop()
+    vector = await loop.run_in_executor(None, embedder.embed_image_path, str(path))
 
     query_filter = _build_filter(payload.date, payload.sensor)
     scored = await store.run_sync(
@@ -134,8 +130,6 @@ async def search_by_image_path(payload: ImagePathSearchRequest) -> SearchRespons
         top_k=payload.top_k,
         results=_to_hits(scored),
     )
-
-
 @router.post("/image-upload", response_model=SearchResponse)
 async def search_by_image_upload(
     file: UploadFile = File(...),
