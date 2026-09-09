@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import analyst, change, ingest, search
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import close_db, init_db
 from app.ml.embedder import get_embedder
 from app.services.qdrant_store import get_qdrant_store
 
@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting Geo-Semantic Backend (offline mode)")
-    init_db()
+    await init_db()
     get_qdrant_store()
     get_embedder()
-    logger.info("SQLite, Qdrant, and OpenCLIP initialized")
+    logger.info("PostgreSQL, Qdrant, and OpenCLIP initialized")
     yield
+    await close_db()
     logger.info("Shutting down Geo-Semantic Backend")
 
 
@@ -53,4 +54,4 @@ app.include_router(analyst.router, prefix=settings.API_PREFIX)
 
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "mode": "offline"}
+    return {"status": "ok", "mode": "offline", "database": "postgresql"}

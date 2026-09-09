@@ -20,12 +20,14 @@ class Settings(BaseSettings):
 
     BASE_DIR: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2])
     DATA_DIR: Path = Field(default_factory=lambda: Path(__file__).resolve().parents[2] / "data")
-    SQLITE_PATH: Path = Field(
-        default_factory=lambda: Path(__file__).resolve().parents[2] / "data" / "analyst.db"
-    )
     QDRANT_PATH: Path = Field(
         default_factory=lambda: Path(__file__).resolve().parents[2] / "data" / "qdrant"
     )
+
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/geo_semantic"
+    DB_ECHO: bool = False
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
 
     OPENCLIP_MODEL: str = "ViT-B-32"
     OPENCLIP_PRETRAINED: str = "openai"
@@ -51,7 +53,6 @@ class Settings(BaseSettings):
     def ensure_dirs(self) -> None:
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.QDRANT_PATH.mkdir(parents=True, exist_ok=True)
-        self.SQLITE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

@@ -5,12 +5,14 @@ from typing import Any, Optional
 
 import numpy as np
 import rasterio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from qdrant_client.http import models as qmodels
+from rasterio.windows import Window
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import ReviewQueueRepository
+from app.core.database import ReviewQueueRepository, get_session
 from app.ml.change_detector import detect_change_between_tiles
 from app.ml.embedder import get_embedder
 from app.services.qdrant_store import get_qdrant_store
@@ -50,8 +52,6 @@ class ChangeDetectResponse(BaseModel):
 
 def _read_tile_from_geotiff(image_path: str, row: int, col: int, tile_size: int) -> np.ndarray:
     with rasterio.open(image_path) as src:
-        from rasterio.windows import Window
-
         window = Window(col, row, tile_size, tile_size)
         return src.read(window=window)
 
@@ -59,7 +59,6 @@ def _read_tile_from_geotiff(image_path: str, row: int, col: int, tile_size: int)
 def _match_t2_record(t1_payload: dict, t2_records: list) -> Optional[dict]:
     t1_row = t1_payload.get("row")
     t1_col = t1_payload.get("col")
-    t1_path = t1_payload.get("image_path")
 
     for rec in t2_records:
         payload = rec.payload or {}
@@ -69,7 +68,10 @@ def _match_t2_record(t1_payload: dict, t2_records: list) -> Optional[dict]:
 
 
 @router.post("/detect", response_model=ChangeDetectResponse)
-async def detect_changes(payload: ChangeDetectRequest) -> ChangeDetectResponse:
+async def detect_changes(
+    payload: ChangeDetectRequest,
+    session: AsyncSession = Depends(get_session),
+) -> ChangeDetectResponse:
     embedder = get_embedder()
     store = get_qdrant_store()
 
@@ -85,7 +87,9 @@ async def detect_changes(payload: ChangeDetectRequest) -> ChangeDetectResponse:
     if not t2_records:
         t2_records = await store.run_sync(
             store.scroll_by_payload,
-            must=[qmodels.FieldCondition(key="date", match=qmodels.MatchValue(value=payload.date_t2))],
+            must=[
+                qmodels.FieldCondition(key="date", match=qmodels.MatchValue(value=payload.date_t2))
+            ],
             limit=5000,
         )
 
@@ -182,8 +186,8 @@ async def detect_changes(payload: ChangeDetectRequest) -> ChangeDetectResponse:
     review_created = 0
     if payload.enqueue_for_review and review_rows:
         filtered_ids = {f"{c.t1_tile_id}__{c.t2_tile_id}" for c in candidates}
-        filtered_rows = [r for r in review_rows if r["tile_id"] in filtered_ids]
-        review_created = ReviewQueueRepository.bulk_create(filtered_rows)
+        filtered_rows = [row for row in review_rows if row["tile_id"] in filtered_ids]
+        review_created = await ReviewQueueRepository.bulk_create(session, filtered_rows)
 
     return ChangeDetectResponse(
         date_t1=payload.date_t1,

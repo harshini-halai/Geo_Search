@@ -1,66 +1,73 @@
 from __future__ import annotations
 
-import sqlite3
-from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Generator, Iterable, Optional
+from typing import AsyncGenerator, Optional
+
+from sqlalchemy import DateTime, Float, Index, Integer, String, Text, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from app.core.config import settings
 
-CREATE_REVIEW_QUEUE_TABLE = """
-CREATE TABLE IF NOT EXISTS review_queue (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tile_id TEXT NOT NULL,
-    t1_tile_id TEXT,
-    t2_tile_id TEXT,
-    status TEXT NOT NULL CHECK(status IN ('PENDING', 'CONFIRMED', 'REJECTED')),
-    confidence REAL NOT NULL DEFAULT 0.0,
-    drift_score REAL,
-    remarks TEXT,
-    bbox_json TEXT,
-    date_t1 TEXT,
-    date_t2 TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-"""
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    echo=settings.DB_ECHO,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=True,
+)
 
-CREATE_INDEXES = [
-    "CREATE INDEX IF NOT EXISTS idx_review_queue_status ON review_queue(status);",
-    "CREATE INDEX IF NOT EXISTS idx_review_queue_tile_id ON review_queue(tile_id);",
-]
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
-def init_db() -> None:
-    settings.ensure_dirs()
-    with sqlite3.connect(settings.SQLITE_PATH) as conn:
-        conn.execute(CREATE_REVIEW_QUEUE_TABLE)
-        for stmt in CREATE_INDEXES:
-            conn.execute(stmt)
-        conn.commit()
+class Base(DeclarativeBase):
+    pass
 
 
-@contextmanager
-def get_db_connection() -> Generator[sqlite3.Connection, None, None]:
-    conn = sqlite3.connect(settings.SQLITE_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+class ReviewQueueItem(Base):
+    __tablename__ = "review_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tile_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    t1_tile_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    t2_tile_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    drift_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bbox_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    date_t1: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    date_t2: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("idx_review_queue_status_created", "status", "created_at"),
+    )
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+async def init_db() -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+async def close_db() -> None:
+    await engine.dispose()
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ReviewQueueRepository:
     @staticmethod
-    def create_item(
+    async def create_item(
+        session: AsyncSession,
         *,
         tile_id: str,
         status: str,
@@ -72,114 +79,97 @@ class ReviewQueueRepository:
         bbox_json: Optional[str] = None,
         date_t1: Optional[str] = None,
         date_t2: Optional[str] = None,
-    ) -> int:
-        now = utc_now_iso()
-        with get_db_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO review_queue (
-                    tile_id, t1_tile_id, t2_tile_id, status, confidence, drift_score,
-                    remarks, bbox_json, date_t1, date_t2, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    tile_id,
-                    t1_tile_id,
-                    t2_tile_id,
-                    status,
-                    confidence,
-                    drift_score,
-                    remarks,
-                    bbox_json,
-                    date_t1,
-                    date_t2,
-                    now,
-                    now,
-                ),
-            )
-            return int(cursor.lastrowid)
+    ) -> ReviewQueueItem:
+        now = utc_now()
+        item = ReviewQueueItem(
+            tile_id=tile_id,
+            t1_tile_id=t1_tile_id,
+            t2_tile_id=t2_tile_id,
+            status=status,
+            confidence=confidence,
+            drift_score=drift_score,
+            remarks=remarks,
+            bbox_json=bbox_json,
+            date_t1=date_t1,
+            date_t2=date_t2,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(item)
+        await session.commit()
+        await session.refresh(item)
+        return item
 
     @staticmethod
-    def list_items(status: Optional[str] = None, limit: int = 100, offset: int = 0) -> list[sqlite3.Row]:
-        query = "SELECT * FROM review_queue"
-        params: list[object] = []
+    async def list_items(
+        session: AsyncSession,
+        *,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ReviewQueueItem]:
+        stmt = select(ReviewQueueItem).order_by(ReviewQueueItem.created_at.desc())
         if status:
-            query += " WHERE status = ?"
-            params.append(status)
-        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-        with get_db_connection() as conn:
-            rows = conn.execute(query, params).fetchall()
-            return list(rows)
+            stmt = stmt.where(ReviewQueueItem.status == status)
+        stmt = stmt.limit(limit).offset(offset)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     @staticmethod
-    def get_item(item_id: int) -> Optional[sqlite3.Row]:
-        with get_db_connection() as conn:
-            row = conn.execute("SELECT * FROM review_queue WHERE id = ?", (item_id,)).fetchone()
-            return row
+    async def get_item(session: AsyncSession, item_id: int) -> Optional[ReviewQueueItem]:
+        result = await session.execute(
+            select(ReviewQueueItem).where(ReviewQueueItem.id == item_id)
+        )
+        return result.scalar_one_or_none()
 
     @staticmethod
-    def update_item(
+    async def update_item(
+        session: AsyncSession,
         item_id: int,
         *,
         status: Optional[str] = None,
         confidence: Optional[float] = None,
         remarks: Optional[str] = None,
-    ) -> bool:
-        fields: list[str] = []
-        params: list[object] = []
+    ) -> Optional[ReviewQueueItem]:
+        item = await ReviewQueueRepository.get_item(session, item_id)
+        if item is None:
+            return None
+
         if status is not None:
-            fields.append("status = ?")
-            params.append(status)
+            item.status = status
         if confidence is not None:
-            fields.append("confidence = ?")
-            params.append(confidence)
+            item.confidence = confidence
         if remarks is not None:
-            fields.append("remarks = ?")
-            params.append(remarks)
-        if not fields:
-            return False
-        fields.append("updated_at = ?")
-        params.append(utc_now_iso())
-        params.append(item_id)
-        with get_db_connection() as conn:
-            cursor = conn.execute(
-                f"UPDATE review_queue SET {', '.join(fields)} WHERE id = ?",
-                params,
-            )
-            return cursor.rowcount > 0
+            item.remarks = remarks
+        item.updated_at = utc_now()
+
+        await session.commit()
+        await session.refresh(item)
+        return item
 
     @staticmethod
-    def bulk_create(items: Iterable[dict]) -> int:
-        now = utc_now_iso()
-        rows = []
-        for item in items:
-            rows.append(
-                (
-                    item["tile_id"],
-                    item.get("t1_tile_id"),
-                    item.get("t2_tile_id"),
-                    item["status"],
-                    item.get("confidence", 0.0),
-                    item.get("drift_score"),
-                    item.get("remarks"),
-                    item.get("bbox_json"),
-                    item.get("date_t1"),
-                    item.get("date_t2"),
-                    now,
-                    now,
-                )
-            )
-        if not rows:
+    async def bulk_create(session: AsyncSession, items: list[dict]) -> int:
+        if not items:
             return 0
-        with get_db_connection() as conn:
-            conn.executemany(
-                """
-                INSERT INTO review_queue (
-                    tile_id, t1_tile_id, t2_tile_id, status, confidence, drift_score,
-                    remarks, bbox_json, date_t1, date_t2, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                rows,
+
+        now = utc_now()
+        rows = [
+            ReviewQueueItem(
+                tile_id=item["tile_id"],
+                t1_tile_id=item.get("t1_tile_id"),
+                t2_tile_id=item.get("t2_tile_id"),
+                status=item["status"],
+                confidence=item.get("confidence", 0.0),
+                drift_score=item.get("drift_score"),
+                remarks=item.get("remarks"),
+                bbox_json=item.get("bbox_json"),
+                date_t1=item.get("date_t1"),
+                date_t2=item.get("date_t2"),
+                created_at=now,
+                updated_at=now,
             )
-            return len(rows)
+            for item in items
+        ]
+        session.add_all(rows)
+        await session.commit()
+        return len(rows)
