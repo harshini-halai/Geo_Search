@@ -1,0 +1,22 @@
+{
+  "cSpell.words": [
+    "embedder",
+    "fastapi",
+    "fromarray",
+    "geotiff",
+    "keepdim",
+    "linalg",
+    "newaxis",
+    "numpy",
+    "OPENCLIP",
+    "pydantic",
+    "qdrant",
+    "qmodels",
+    "rasterio",
+    "scikit",
+    "scipy",
+    "skimage",
+    "torchvision",
+    "uvicorn"
+  ]
+}
