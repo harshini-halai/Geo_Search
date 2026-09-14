@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.database import close_db, init_db
 from app.ml.embedder import get_embedder
 from app.services.qdrant_store import get_qdrant_store
+from app.api.ml_routes import router as ml_router
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -50,6 +51,7 @@ app.include_router(ingest.router, prefix=settings.API_PREFIX)
 app.include_router(search.router, prefix=settings.API_PREFIX)
 app.include_router(change.router, prefix=settings.API_PREFIX)
 app.include_router(analyst.router, prefix=settings.API_PREFIX)
+app.include_router(ml_router)
 
 
 @app.get("/health")
