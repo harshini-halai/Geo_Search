@@ -6,14 +6,14 @@ An offline-first, full-stack geospatial surveillance and semantic retrieval plat
 
 ## Key Highlights & Core Features
 
-* **Automated GeoTIFF Ingestion & Tiling Pipeline:** Dynamically slices high-resolution satellite imagery into standardized 256x256 tiles with configurable overlap and extracts multi-dimensional embeddings.
-* **Dual-Store Synchronization:**
-  * **Qdrant (Vector Store):** 512-dimensional vector indexing using HNSW for sub-second semantic and cross-modal cosine similarity search.
-  * **SQLite / `aiosqlite` (Audit Ledger):** Write-Ahead Logging (WAL) persistent relational store tracking metadata, unsupervised clusters, anomaly scores, and analyst triage statuses.
-* **Cross-Modal Semantic Search:** Query satellite imagery using natural language prompts (e.g., `"dense canopy forest"`, `"heavy excavation"`, `"river bends and water"`) via cross-attention ViT embeddings.
-* **Unsupervised Geospatial Intelligence:** KMeans spatial clustering alongside Isolation Forest anomaly detection for automated land-cover categorization and surface change monitoring.
-* **Production Decoupled MVC Architecture:** Clean separation of backend FastAPI endpoints and an offline-capable frontend console utilizing Tailwind CSS, Chart.js telemetry, and modular client scripts.
-* **Human-in-the-Loop (HITL) Triage Console:** Analysts can review suspicious patches, inspect full-resolution imagery in an optical HUD crosshair modal, and sign off with verified or dismissed tags.
+- **Automated GeoTIFF Ingestion & Tiling Pipeline:** Dynamically slices high-resolution satellite imagery into standardized 256x256 tiles with configurable overlap and extracts multi-dimensional embeddings.
+- **Dual-Store Synchronization:**
+    _ **Qdrant (Vector Store):** 512-dimensional vector indexing using HNSW for sub-second semantic and cross-modal cosine similarity search.
+    _ **SQLite / `aiosqlite` (Audit Ledger):** Write-Ahead Logging (WAL) persistent relational store tracking metadata, unsupervised clusters, anomaly scores, and analyst triage statuses.
+- **Cross-Modal Semantic Search:** Query satellite imagery using natural language prompts (e.g., `"dense canopy forest"`, `"heavy excavation"`, `"river bends and water"`) via cross-attention ViT embeddings.
+- **Unsupervised Geospatial Intelligence:** KMeans spatial clustering alongside Isolation Forest anomaly detection for automated land-cover categorization and surface change monitoring.
+- **Production Decoupled MVC Architecture:** Clean separation of backend FastAPI endpoints and an offline-capable frontend console utilizing Tailwind CSS, Chart.js telemetry, and modular client scripts.
+- **Human-in-the-Loop (HITL) Triage Console:** Analysts can review suspicious patches, inspect full-resolution imagery in an optical HUD crosshair modal, and sign off with verified or dismissed tags.
 
 ---
 
@@ -45,3 +45,4 @@ geo-backend/
 ├── main.py                   # Application entrypoint & static mount registry
 └── requirements.txt
 
+```
