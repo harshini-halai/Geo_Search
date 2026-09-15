@@ -9,6 +9,7 @@ from qdrant_client.http import models as qmodels
 from app.core.config import settings
 from app.ml.embedder import get_embedder
 from app.services.qdrant_store import get_qdrant_store
+from qdrant_client.http import models
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -159,3 +160,22 @@ async def search_by_image_upload(
         top_k=top_k,
         results=_to_hits(scored),
     )
+@router.get("/filter-by-tag")
+async def filter_by_tag(tag: str, limit: int = 10, store: QdrantStore = Depends(get_qdrant_store)):
+    """
+    Directly query tiles belonging to a specific predicted ML category.
+    """
+    results, _ = store._client.scroll(
+        collection_name=store.collection_name,
+        scroll_filter=models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="primary_tag",
+                    match=models.MatchValue(value=tag)
+                )
+            ]
+        ),
+        limit=limit,
+        with_payload=True
+    )
+    return {"tag": tag, "total": len(results), "tiles": [r.payload for r in results]}

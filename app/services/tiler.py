@@ -11,6 +11,7 @@ from shapely.geometry import box, mapping
 
 from app.core.config import settings
 
+from app.services.ml_tagger import predict_land_cover
 
 @dataclass(frozen=True)
 class TileRecord:
@@ -106,3 +107,14 @@ def iter_tiles_from_geotiff(
                     sensor=sensor,
                     image_path=str(image_path.resolve()),
                 )
+
+predicted_tags = predict_land_cover(vector, top_k=2)
+
+payload = {
+    "image_path": str(tile_path),
+    "date": str(date),
+    "sensor": sensor,
+    "bbox": bbox,
+    "primary_tag": predicted_tags[0]["label"],
+    "tags": predicted_tags
+}
