@@ -3,7 +3,7 @@ import aiosqlite
 
 DB_PATH = Path("data/geo_system.db")
 
-async def init_db():
+async def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
@@ -19,7 +19,7 @@ async def init_db():
         """)
         await db.commit()
 
-async def record_tile(tile_id: str, path: str, tag: str, cluster: int, score: float):
+async def record_tile(tile_id: str, path: str, tag: str, cluster: int, score: float) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             INSERT OR REPLACE INTO tile_audit (id, image_path, primary_tag, cluster, anomaly_score)
@@ -36,7 +36,7 @@ async def get_audit_list(limit: int = 50):
         )
         return await cursor.fetchall()
 
-async def update_audit_status(tile_id: str, status: str):
+async def update_audit_status(tile_id: str, status: str) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE tile_audit SET status = ? WHERE id = ?", 
