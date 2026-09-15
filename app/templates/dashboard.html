@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Geo-Semantic Analyst Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-6 font-sans">
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center bg-slate-900 p-5 rounded-2xl border border-slate-800">
+      <div>
+        <h1 class="text-xl font-bold text-sky-400">Geo-Semantic Surveillance Console</h1>
+        <p class="text-xs text-slate-400">Offline-first Tile Processing • Isolation Forest Alerts • SQLite Ledger</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="px-3 py-1 bg-sky-950 text-sky-400 border border-sky-800 text-xs rounded-lg">SQLite Connected</span>
+        <span class="px-3 py-1 bg-emerald-950 text-emerald-400 border border-emerald-800 text-xs rounded-lg">Qdrant Active</span>
+      </div>
+    </div>
+
+    <!-- Analytics & Search Row -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      
+      <!-- Cluster Analytics Chart -->
+      <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col items-center">
+        <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wide self-start mb-4">Land-Cover Distribution</h2>
+        <div class="w-48 h-48">
+          <canvas id="clusterDoughnut"></canvas>
+        </div>
+      </div>
+
+      <!-- Quick Semantic Search Box -->
+      <div class="md:col-span-2 bg-slate-900 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between">
+        <div>
+          <h2 class="text-xs font-semibold text-slate-300 uppercase tracking-wide mb-2">Semantic Explorer</h2>
+          <div class="flex gap-3 mt-2">
+            <input id="searchInput" type="text" placeholder="Query: e.g. illegal mining or dried riverbed" 
+                   class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-sky-500">
+            <button onclick="executeSearch()" class="bg-sky-600 hover:bg-sky-500 px-6 py-2 rounded-xl text-xs font-semibold">Query</button>
+          </div>
+        </div>
+        <div id="searchResults" class="grid grid-cols-3 gap-3 mt-4 text-xs text-slate-400">
+          <p class="col-span-3 text-slate-600">Run a search to populate vector results.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SQLite Analyst Review Table -->
+    <div class="bg-slate-900 p-5 rounded-2xl border border-slate-800">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wide">Suspicious Tile Audit Queue</h2>
+        <span class="text-xs text-slate-500">Sorted by Anomaly Score</span>
+      </div>
+      
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-950 text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="p-3">Tile Identifier</th>
+              <th class="p-3">Primary Category</th>
+              <th class="p-3">Cluster</th>
+              <th class="p-3">Outlier Score</th>
+              <th class="p-3">Status</th>
+              <th class="p-3 text-right">Review Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60">
+            {% for row in audits %}
+            <tr class="hover:bg-slate-800/30">
+              <td class="p-3 font-mono text-slate-400">{{ row.id }}</td>
+              <td class="p-3"><span class="px-2 py-0.5 bg-slate-800 rounded text-sky-400">{{ row.primary_tag }}</span></td>
+              <td class="p-3">Group {{ row.cluster }}</td>
+              <td class="p-3 font-bold {% if row.anomaly_score > 0.5 %}text-rose-400{% else %}text-amber-400{% endif %}">
+                {{ row.anomaly_score }}
+              </td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded text-[10px] uppercase font-bold 
+                  {% if row.status == 'verified' %}bg-emerald-950 text-emerald-400 border border-emerald-800
+                  {% elif row.status == 'false_positive' %}bg-slate-800 text-slate-400
+                  {% else %}bg-amber-950 text-amber-400 border border-amber-800{% endif %}">
+                  {{ row.status }}
+                </span>
+              </td>
+              <td class="p-3 text-right space-x-2">
+                <form action="/audit/{{ row.id }}/update" method="post" class="inline">
+                  <input type="hidden" name="status" value="verified">
+                  <button type="submit" class="px-2.5 py-1 bg-emerald-600/20 text-emerald-300 hover:bg-emerald-600/40 rounded border border-emerald-500/30 text-[11px]">Verify</button>
+                </form>
+                <form action="/audit/{{ row.id }}/update" method="post" class="inline">
+                  <input type="hidden" name="status" value="false_positive">
+                  <button type="submit" class="px-2.5 py-1 bg-slate-800 text-slate-400 hover:bg-slate-700 rounded text-[11px]">Dismiss</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="p-4 text-center text-slate-600">No pending anomalies recorded in SQLite ledger.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Render Chart using data passed from Controller
+    // NAYA FORMAT (VS Code error nahi dega):
+const clusterDist = JSON.parse('{{ insights.cluster_distribution | tojson | safe }}');
+    const ctx = document.getElementById('clusterDoughnut').getContext('2d');
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(clusterDist),
+        datasets: [{
+          data: Object.values(clusterDist),
+          backgroundColor: ['#0ea5e9', '#6366f1', '#a855f7', '#ec4899'],
+          borderWidth: 0
+        }]
+      },
+      options: { plugins: { legend: { display: false } } }
+    });
+
+    async function executeSearch() {
+      const q = document.getElementById('searchInput').value;
+      if(!q) return;
+      const res = await fetch(`/api/v1/search/text?query=${encodeURIComponent(q)}&limit=3`);
+      const data = await res.json();
+      const container = document.getElementById('searchResults');
+      container.innerHTML = '';
+      (data.results || []).forEach(item => {
+        container.innerHTML += `
+          <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+            <p class="font-bold text-slate-200 truncate">${item.image_path || item.id}</p>
+            <p class="text-[10px] text-sky-400 mt-1">Score: ${item.score ? item.score.toFixed(3) : 'N/A'}</p>
+          </div>
+        `;
+      });
+    }
+  </script>
+</body>
+</html>
