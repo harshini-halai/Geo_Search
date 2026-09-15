@@ -8,7 +8,7 @@ An offline-first, full-stack geospatial surveillance and semantic retrieval plat
 
 - **Automated GeoTIFF Ingestion & Tiling Pipeline:** Dynamically slices high-resolution satellite imagery into standardized 256x256 tiles with configurable overlap and extracts multi-dimensional embeddings.
 - **Dual-Store Synchronization:**
-    _ **Qdrant (Vector Store):** 512-dimensional vector indexing using HNSW for sub-second semantic and cross-modal cosine similarity search.
+    _**Qdrant (Vector Store):** 512-dimensional vector indexing using HNSW for sub-second semantic and cross-modal cosine similarity search.
     _ **SQLite / `aiosqlite` (Audit Ledger):** Write-Ahead Logging (WAL) persistent relational store tracking metadata, unsupervised clusters, anomaly scores, and analyst triage statuses.
 - **Cross-Modal Semantic Search:** Query satellite imagery using natural language prompts (e.g., `"dense canopy forest"`, `"heavy excavation"`, `"river bends and water"`) via cross-attention ViT embeddings.
 - **Unsupervised Geospatial Intelligence:** KMeans spatial clustering alongside Isolation Forest anomaly detection for automated land-cover categorization and surface change monitoring.
