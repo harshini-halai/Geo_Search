@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, Field, field_validator
 from qdrant_client.http import models as qmodels
-
+from app.services.qdrant_store import QdrantStore, get_qdrant_store
 from app.core.config import settings
 from app.ml.embedder import get_embedder
 from app.services.qdrant_store import get_qdrant_store
