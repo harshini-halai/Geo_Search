@@ -18,9 +18,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Offline-First Geo-Semantic Intelligence System",
-    description="Local satellite imagery semantic search, change detection, and ML analytics",
-    version="1.0.0",
+    title="AERO-SENTINEL // Geo-Semantic Intelligence Platform",
+    description="Offline-first Satellite Imagery Semantic Search & Surveillance Platform",
+    version="1.4.0",
     lifespan=lifespan,
 )
 
@@ -32,15 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static asset mounts
-static_dir = Path("static")
+# 1. Mount modular static assets (CSS, JS)
+static_dir = Path("frontend/static")
 if static_dir.exists():
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# Storage & Tile preview mount
+# 2. Mount tile storage for visual previews
 tiles_dir = Path("storage/tiles")
 tiles_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/storage/tiles", StaticFiles(directory="storage/tiles"), name="tiles")
+app.mount("/storage/tiles", StaticFiles(directory=str(tiles_dir)), name="tiles")
 
 # API Routers
 api_prefix = getattr(settings, "API_PREFIX", "/api/v1")
@@ -59,5 +59,5 @@ async def health() -> dict[str, str]:
     return {
         "status": "ok",
         "mode": "offline-first",
-        "system": "Geo-Semantic Engine",
+        "system": "Aero-Sentinel Core",
     }
