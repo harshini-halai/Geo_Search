@@ -63,5 +63,49 @@ geo-backend/
 
 ### Quick Start (Local Setup)
 1. Install dependencies:
-   ```bash
+   
    pip install -r requirements.txt
+
+## Data Layer & Pipeline
+
+### 1. Raster Ingestion & Synthetic Imagery
+- **Image Specifications**: Synthetic multispectral optical satellite tiles generated at standard $256 \times 256$ resolution across RGB channels.
+- **Storage Path**: Standardized tile storage localized under `storage/tiles/<tile_id>.png`.
+- **Target Land Classes**:
+  - `Dense Forest Canopy` (Baseline vegetation canopy)
+  - `River Delta & Estuary` (Hydrological surface water)
+  - `Industrial Logistics Zone` (Commercial infrastructure)
+  - `Rapid Deforestation Scar` (High-priority forest loss anomaly)
+  - `High-Density Residential` (Urban settlement)
+  - `Offshore Harbor Vessel Lane` (Maritime transit corridor)
+
+### 2. Relational Audit Metadata (SQLite)
+- **Database Path**: `data/geo_system.db`
+- **Concurrency Mode**: Configured with `PRAGMA journal_mode=WAL` (Write-Ahead Logging) for non-blocking concurrent reads during analyst triage actions.
+- **Schema (`tile_audit`)**:
+  - `id` (TEXT PRIMARY KEY): Unique identifier (e.g., `tile_alpha_01`).
+  - `image_path` (TEXT): Disk path to the tile image.
+  - `primary_tag` (TEXT): Ground truth or classified land-use description.
+  - `cluster_id` (INTEGER): Unsupervised grouping cluster assignment ($k=0, 1, 2$).
+  - `anomaly_score` (REAL): Outlier score derived via Isolation Forest ($0.00$ to $1.00$).
+  - `status` (TEXT): HITL verification stage (`pending`, `verified`, `dismissed`).
+
+### 3. Vector Database (Qdrant)
+- **Collection Name**: `satellite_tiles`
+- **Vector Dimension**: 512-D normalized embeddings representing spatial-visual representations.
+- **Distance Metric**: `Cosine` similarity.
+- **Payload Schema**:
+  ```json
+  {
+    "tile_id": "tile_alpha_01",
+    "image_path": "/storage/tiles/tile_alpha_01.png",
+    "tag": "Dense Forest Canopy",
+    "date": "2026-03-01",
+    "sensor": "Sentinel-2",
+    "bbox": {"xmin": 0, "ymin": 0, "xmax": 256, "ymax": 256}
+  }
+
+### 4. Data Seeding Workflow
+To reset or generate a fresh batch of synthetic tiles, audit entries, and Qdrant index embeddings, run:
+
+python sample_data.py
