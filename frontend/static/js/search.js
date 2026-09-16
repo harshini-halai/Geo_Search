@@ -44,3 +44,27 @@ async function executeSearch() {
     container.innerHTML = '<p class="col-span-3 text-rose-400 font-mono text-xs text-center py-4">Error executing vector query.</p>';
   }
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+    // Search input field aur rows target karo
+    const searchInput = document.querySelector('input[type="search"]') 
+                     || document.querySelector('#searchInput')
+                     || document.querySelector('input[placeholder*="Search"]');
+
+    if (!searchInput) return;
+
+    searchInput.addEventListener("input", (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const rows = document.querySelectorAll("table tbody tr");
+
+        rows.forEach((row) => {
+            const rowText = row.innerText.toLowerCase();
+            // Agar query match kare toh dikhao, warna hide karo
+            if (rowText.includes(query)) {
+                row.style.display = "";
+            } else {
+                row.style.display = "none";
+            }
+        });
+    });
+});

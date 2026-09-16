@@ -46,3 +46,22 @@ geo-backend/
 └── requirements.txt
 
 ```
+
+## System Architecture & Workflow
+
+### 1. Ingestion & Embedding Pipeline
+- Splits large raster imagery into standard 256x256 tiles under `/storage/tiles/`.
+- Computes 512-D spatial/visual embeddings and indexes them in a local Qdrant collection (`satellite_tiles`).
+
+### 2. Anomaly Detection & Clustering
+- **Isolation Forest**: Evaluates feature vectors to flag structural and land-use outliers against a defined anomaly threshold (e.g., 0.550).
+- **K-Means (k=3)**: Groups indexed tiles into distinct semantic land-use categories (e.g., Forest, Water/Estuary, Urban/Industrial).
+
+### 3. Human-in-the-Loop (HITL) Audit System
+- Fast, local persistence using SQLite (`geo_system.db`) running in WAL mode for concurrent writes.
+- Web dashboard allows analysts to visually triage flagged tiles, view tactical HUD overlays, and persist review status (`pending`, `verified`, `false_positive`).
+
+### Quick Start (Local Setup)
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
