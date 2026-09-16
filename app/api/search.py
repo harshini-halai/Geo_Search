@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, Field, field_validator
 from qdrant_client.http import models as qmodels
 from app.services.qdrant_store import QdrantStore, get_qdrant_store
 from app.core.config import settings
 from app.ml.embedder import get_embedder
-from app.services.qdrant_store import get_qdrant_store
-from qdrant_client.http import models
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -65,11 +62,41 @@ def _to_hits(scored_points) -> list[SearchHit]:
     return hits
 
 
-@router.post("/text", response_model=SearchResponse)
-async def search_by_text(payload: TextSearchRequest) -> SearchResponse:
+# 1. GET Handler (Frontend query: /api/v1/search/text?query=water&limit=3)
+@router.get("/text", response_model=SearchResponse)
+async def search_by_text_get(
+    query: str = Query(..., min_length=1, max_length=512),
+    limit: int = Query(default=settings.SEARCH_DEFAULT_TOP_K, ge=1, le=100),
+    date: Optional[str] = Query(default=None),
+    sensor: Optional[str] = Query(default=None),
+    store: QdrantStore = Depends(get_qdrant_store)
+) -> SearchResponse:
     embedder = get_embedder()
-    store = get_qdrant_store()
+    vector = await embedder.embed_text_async(query.strip())
+    query_filter = _build_filter(date, sensor)
 
+    # Note: top_k use kiya hai limit ki jagah
+    scored = await store.run_sync(
+        store.search,
+        vector,
+        top_k=limit,
+        query_filter=query_filter
+    )
+    return SearchResponse(
+        mode="text",
+        query=query,
+        top_k=limit,
+        results=_to_hits(scored)
+    )
+
+
+# 2. POST Handler (Existing API spec compatibility)
+@router.post("/text", response_model=SearchResponse)
+async def search_by_text(
+    payload: TextSearchRequest,
+    store: QdrantStore = Depends(get_qdrant_store)
+) -> SearchResponse:
+    embedder = get_embedder()
     vector = await embedder.embed_text_async(payload.query.strip())
     query_filter = _build_filter(payload.date, payload.sensor)
 
@@ -77,105 +104,11 @@ async def search_by_text(payload: TextSearchRequest) -> SearchResponse:
         store.search,
         vector,
         top_k=payload.top_k,
-        query_filter=query_filter,
+        query_filter=query_filter
     )
-
     return SearchResponse(
         mode="text",
         query=payload.query,
         top_k=payload.top_k,
-        results=_to_hits(scored),
+        results=_to_hits(scored)
     )
-
-
-class ImagePathSearchRequest(BaseModel):
-    image_path: str = Field(..., min_length=1)
-    top_k: int = Field(default=settings.SEARCH_DEFAULT_TOP_K, ge=1, le=100)
-    date: Optional[str] = None
-    sensor: Optional[str] = None
-
-    @field_validator("image_path")
-    @classmethod
-    def non_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("image_path cannot be empty")
-        return v
-
-
-@router.post("/image-path", response_model=SearchResponse)
-async def search_by_image_path(payload: ImagePathSearchRequest) -> SearchResponse:
-    from pathlib import Path
-    import asyncio
-
-    embedder = get_embedder()
-    store = get_qdrant_store()
-
-    path = Path(payload.image_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"Image not found: {payload.image_path}")
-
-    loop = asyncio.get_running_loop()
-    vector = await loop.run_in_executor(None, embedder.embed_image_path, str(path))
-
-    query_filter = _build_filter(payload.date, payload.sensor)
-    scored = await store.run_sync(
-        store.search,
-        vector,
-        top_k=payload.top_k,
-        query_filter=query_filter,
-    )
-
-    return SearchResponse(
-        mode="image",
-        query=None,
-        top_k=payload.top_k,
-        results=_to_hits(scored),
-    )
-@router.post("/image-upload", response_model=SearchResponse)
-async def search_by_image_upload(
-    file: UploadFile = File(...),
-    top_k: int = Form(default=settings.SEARCH_DEFAULT_TOP_K),
-    date: Optional[str] = Form(default=None),
-    sensor: Optional[str] = Form(default=None),
-) -> SearchResponse:
-    if file.content_type and not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Uploaded file must be an image")
-
-    embedder = get_embedder()
-    store = get_qdrant_store()
-    data = await file.read()
-    vector = await embedder.embed_image_bytes_async(data)
-
-    query_filter = _build_filter(date, sensor)
-    scored = await store.run_sync(
-        store.search,
-        vector,
-        top_k=top_k,
-        query_filter=query_filter,
-    )
-
-    return SearchResponse(
-        mode="image",
-        query=None,
-        top_k=top_k,
-        results=_to_hits(scored),
-    )
-@router.get("/filter-by-tag")
-async def filter_by_tag(tag: str, limit: int = 10, store: QdrantStore = Depends(get_qdrant_store)):
-    """
-    Directly query tiles belonging to a specific predicted ML category.
-    """
-    results, _ = store._client.scroll(
-        collection_name=store.collection_name,
-        scroll_filter=models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="primary_tag",
-                    match=models.MatchValue(value=tag)
-                )
-            ]
-        ),
-        limit=limit,
-        with_payload=True
-    )
-    return {"tag": tag, "total": len(results), "tiles": [r.payload for r in results]}
