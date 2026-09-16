@@ -44,23 +44,30 @@ class QdrantStore:
                 wait=True,
             )
 
-    def search(
-        self,
-        query_vector: list[float],
-        *,
-        top_k: int,
-        query_filter: Optional[qmodels.Filter] = None,
-    ) -> list[qmodels.ScoredPoint]:
-        with self._io_lock:
+    def search(self, query_vector, top_k=5, query_filter=None):
+        # Collection name determine karo
+        col_name = (
+            getattr(self, "collection_name", None)
+            or getattr(self, "collection", None)
+            or getattr(self, "_collection_name", None)
+            or getattr(settings, "QDRANT_COLLECTION", "satellite_tiles")
+        )
+
+        if hasattr(self._client, "query_points"):
+            response = self._client.query_points(
+                collection_name=col_name,
+                query=query_vector,
+                limit=top_k,
+                query_filter=query_filter,
+            )
+            return response.points
+        else:
             return self._client.search(
-                collection_name=settings.QDRANT_COLLECTION,
+                collection_name=col_name,
                 query_vector=query_vector,
                 limit=top_k,
                 query_filter=query_filter,
-                with_payload=True,
-                with_vectors=False,
             )
-
     def scroll_by_payload(
         self,
         *,
